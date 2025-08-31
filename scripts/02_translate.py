@@ -1,0 +1,33 @@
+import pathlib, typer, yaml
+from loguru import logger
+
+app = typer.Typer()
+def load_cfg():
+    with open("config.yaml","r") as f: return yaml.safe_load(f)
+
+def simple_translate(text, src="ko", tgt="en"):
+    # Simple translation fallback if Argos fails
+    # This is a placeholder - in production you might want to use Google Translate API
+    return text  # For now, just return original text
+
+def argos_translate(text, src="ko", tgt="en"):
+    try:
+        import argostranslate.translate as T
+        return T.translate(text, from_code=src, to_code=tgt)
+    except Exception as e:
+        logger.warning(f"Argos translation failed: {e}, using fallback")
+        return simple_translate(text, src, tgt)
+
+@app.command()
+def run(slug: str):
+    cfg = load_cfg()
+    wd = pathlib.Path(cfg["paths"]["work_dir"]) / slug
+    src = (wd/"clean_ko.txt").read_text(encoding="utf-8")
+    if cfg["use_api"]:
+        raise SystemExit("API 번역 분기는 비활성화 상태(use_api=false 권장).")
+    en = argos_translate(src, cfg["language"]["source"], cfg["language"]["target"])
+    (wd/"draft_en.txt").write_text(en, encoding="utf-8")
+    logger.success(f"Translated -> {wd}/draft_en.txt")
+
+if __name__ == "__main__":
+    app()

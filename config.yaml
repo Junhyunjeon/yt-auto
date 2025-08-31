@@ -1,0 +1,35 @@
+project_name: "yt-eng-pipeline"
+use_api: false            # 기본: 완전 로컬
+language:
+  source: "ko"
+  target: "en"
+paths:
+  input_dir: "./input"
+  work_dir: "./work"
+  output_dir: "./output"
+  assets_dir: "./assets"
+tts:
+  engine: "piper"         # piper|edge|elevenlabs
+  piper:
+    voice_path: "~/piper-voices/en_US-amy-low.onnx"
+    json_path: "~/piper-voices/en_US-amy-low.onnx.json"
+video:
+  fps: 30
+  width: 1920
+  height: 1080
+  bg_image: "./assets/bg.jpg"   # 없으면 단색 생성
+  waveform: true
+seo:
+  title_prefix: ""
+  tags: ["finance","tech","leadership"]
+publish:
+  wordpress:
+    enabled: false
+    base_url: "https://YOUR-WP-SITE/wp-json/wp/v2"
+    username: "YOUR_ID"
+    app_password: "YOUR_APP_PASSWORD"
+    category_ids: [1]
+  youtube:
+    enabled: false
+    client_secret_file: "./client_secret.json"
+    default_privacy: "unlisted"
