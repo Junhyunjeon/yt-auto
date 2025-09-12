@@ -1,0 +1,11 @@
+# config.yaml.example
+translator: argos    # argos | google 등
+tts: piper           # piper | elevenlabs 등
+paths:
+  piper_exec: "${PIPER_EXEC:-piper}"
+  piper_model: "${PIPER_MODEL:-$HOME/piper_models/en_US-amy-medium.onnx}"
+  ffmpeg_exec: "ffmpeg"
+options:
+  voice: "en_US-amy"
+  speech_rate: 1.0
+  audio_sample_rate: 22050
