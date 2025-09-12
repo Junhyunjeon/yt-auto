@@ -14,9 +14,21 @@ def argos_translate(text, src="ko", tgt="en"):
     try:
         import argostranslate.translate as T
         return T.translate(text, from_code=src, to_code=tgt)
+    except ModuleNotFoundError as e:
+        if "_lzma" in str(e):
+            logger.error("❌ Python lzma module not available!")
+            logger.error("   Fix: brew install xz")
+            logger.error("   Then: pyenv install --force $(pyenv version-name)")
+            logger.error("   Or reinstall Python with xz support")
+            raise SystemExit(1)
+        else:
+            logger.error(f"❌ Argos translation module not found: {e}")
+            logger.error("   Fix: pip install argostranslate")
+            raise SystemExit(1)
     except Exception as e:
-        logger.warning(f"Argos translation failed: {e}, using fallback")
-        return simple_translate(text, src, tgt)
+        logger.error(f"❌ Translation failed: {e}")
+        logger.error("   This is a critical error - translation cannot proceed")
+        raise SystemExit(1)
 
 @app.command()
 def run(slug: str):
