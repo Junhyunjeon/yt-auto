@@ -26,6 +26,28 @@ A complete offline pipeline that transforms Korean scripts into English content 
 
 ## 🚀 Quick Start
 
+### Prerequisites
+
+```bash
+# Install system dependencies
+brew install xz ffmpeg piper
+
+# Download Piper voice model
+mkdir -p ~/piper_models
+wget https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/amy/medium/en_US-amy-medium.onnx -P ~/piper_models/
+wget https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/amy/medium/en_US-amy-medium.onnx.json -P ~/piper_models/
+
+# Setup configuration
+cp config.yaml.example config.yaml
+cp .env.example .env
+# Edit .env to set PIPER_MODEL path if needed
+
+# Run environment check
+./scripts/diagnose.sh
+```
+
+### Running the Pipeline
+
 1. **Place your Korean script** in the `input/` directory:
    ```
    input/my-script.txt
@@ -92,18 +114,46 @@ For input `input/my-script.txt`, the pipeline generates:
 
 ## 🔍 Troubleshooting
 
-### Translation Issues
-- Argos models require proper Python lzma support
-- Currently falls back to identity translation (Korean remains)
-- For production: install proper Argos models or use API translation
+### lzma Module Error (Python)
+**Error**: `ModuleNotFoundError: No module named '_lzma'`
+**Solution**:
+```bash
+brew install xz
+# If using pyenv:
+pyenv install --force $(pyenv version-name)
+# Or reinstall Python with proper xz support
+```
 
-### TTS Issues  
-- Piper binary not found: creates dummy WAV files
-- For production: install proper Piper TTS system
+### Piper Not Found
+**Error**: `Piper executable not found`
+**Solution**:
+```bash
+brew install piper
+# Or download binary from https://github.com/rhasspy/piper/releases
+# Set PIPER_EXEC in .env if not in PATH
+```
+
+### Piper Model Not Found
+**Error**: `Piper model not found`
+**Solution**:
+```bash
+mkdir -p ~/piper_models
+# Download voice model (example: US English Amy voice)
+wget https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/amy/medium/en_US-amy-medium.onnx -P ~/piper_models/
+wget https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/amy/medium/en_US-amy-medium.onnx.json -P ~/piper_models/
+# Update PIPER_MODEL path in .env
+```
+
+### FFmpeg Issues
+**Error**: `ffmpeg not found`
+**Solution**:
+```bash
+brew install ffmpeg
+```
 
 ### Video Issues
 - Background image not found: auto-generates black background
-- FFmpeg errors: falls back to simple video without waveform
+- FFmpeg errors: Check ffmpeg installation with `ffmpeg -version`
 
 ## ✅ Acceptance Criteria Status
 

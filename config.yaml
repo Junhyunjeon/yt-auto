@@ -1,35 +1,40 @@
-project_name: "yt-eng-pipeline"
-use_api: false            # 기본: 완전 로컬
+# Configuration for YouTube automation pipeline
+translator: argos    # argos | google
+use_api: false      # Use offline translation by default
+
+# TTS settings  
+tts:
+  engine: piper     # piper | elevenlabs
+  voice: "en_US-amy"
+
+# File paths
+paths:
+  work_dir: "work"
+  output_dir: "output"
+  assets_dir: "assets"
+  piper_exec: "${PIPER_EXEC:-piper}"
+  piper_model: "${PIPER_MODEL:-$HOME/piper_models/en_US-amy-medium.onnx}"
+  ffmpeg_exec: "ffmpeg"
+
+# Processing options
+options:
+  voice: "en_US-amy"
+  speech_rate: 1.0
+  audio_sample_rate: 22050
+
+# Language settings
 language:
   source: "ko"
   target: "en"
-paths:
-  input_dir: "./input"
-  work_dir: "./work"
-  output_dir: "./output"
-  assets_dir: "./assets"
-tts:
-  engine: "piper"         # piper|edge|elevenlabs
-  piper:
-    voice_path: "~/piper-voices/en_US-amy-low.onnx"
-    json_path: "~/piper-voices/en_US-amy-low.onnx.json"
+
+# Video settings
 video:
-  fps: 30
   width: 1920
   height: 1080
-  bg_image: "./assets/bg.jpg"   # 없으면 단색 생성
-  waveform: true
-seo:
-  title_prefix: ""
-  tags: ["finance","tech","leadership"]
+  fps: 30
+  background_color: "#000000"
+
+# Publishing settings (optional)
 publish:
-  wordpress:
-    enabled: false
-    base_url: "https://YOUR-WP-SITE/wp-json/wp/v2"
-    username: "YOUR_ID"
-    app_password: "YOUR_APP_PASSWORD"
-    category_ids: [1]
-  youtube:
-    enabled: false
-    client_secret_file: "./client_secret.json"
-    default_privacy: "unlisted"
+  wordpress: false
+  youtube: false
