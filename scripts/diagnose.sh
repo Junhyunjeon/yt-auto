@@ -1,45 +1,63 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-echo "== Python & lzma check =="
-python3 - <<'PY'
+say_ok()   { printf "OK: %s\n" "$1"; }
+say_err()  { printf "ERR: %s\n" "$1"; }
+
+echo "== Python & venv check =="
+if python -c "import sys; assert sys.version_info[:2] == (3,10); print(sys.version)" 2>/dev/null; then
+  say_ok "Python 3.10.x active"
+else
+  say_err "Python 3.10.x not active (run: source .venv/bin/activate)"
+fi
+python -c "import sys; print('exe=', sys.executable)"
+
+echo "== lzma check =="
+python - <<'PY'
 try:
-    import lzma
-    print("OK: python lzma available")
+    import lzma; print("OK: lzma available")
 except Exception as e:
-    print("ERR: python lzma not available -> On macOS: brew install xz && (pyenv 사용시 xz 경로로 파이썬 재설치 필요).", flush=True)
-    raise
+    print("ERR: lzma not available", e)
 PY
 
 echo "== FFmpeg check =="
 if command -v ffmpeg >/dev/null 2>&1; then
   ffmpeg -version | head -n1
+  say_ok "ffmpeg found"
 else
-  echo "ERR: ffmpeg not found -> brew install ffmpeg"
-  exit 1
+  say_err "ffmpeg not found (brew install ffmpeg)"
 fi
 
-echo "== Piper check =="
+echo "== Piper binary check =="
 if command -v piper >/dev/null 2>&1; then
-  echo "OK: piper found"
+  piper -h >/dev/null 2>&1 && say_ok "piper binary found"
 else
-  echo "ERR: piper not found -> brew install piper 또는 릴리스 바이너리 다운로드 후 PATH 등록"
-  exit 1
+  say_err "piper binary not found (this is OK if you use: python -m piper)"
 fi
 
-echo "== Piper model check =="
-# 모델 경로는 .env 또는 config.yaml에서 읽도록 안내. 여기선 존재 유무만 가이드.
-POSSIBLE_DIRS=("$HOME/piper_models" "./piper_models")
-FOUND_MODEL="no"
-for d in "${POSSIBLE_DIRS[@]}"; do
-  if ls "$d"/*.onnx >/dev/null 2>&1; then
-    echo "OK: model candidate in $d"
-    FOUND_MODEL="yes"
-    break
-  fi
-done
-if [ "$FOUND_MODEL" = "no" ]; then
-  echo "WARN: piper 모델(.onnx/.json) 미발견 -> 예: en_US-amy-medium.onnx 를 ~/piper_models/ 에 두고 config에 경로 설정"
+echo "== Piper (python module) check =="
+if python -m piper -h >/dev/null 2>&1; then
+  say_ok "python -m piper works"
+else
+  say_err "python -m piper failed (check venv and installation: pip install piper-tts)"
 fi
 
-echo "== All basic checks passed (or warnings printed) =="
+echo "== Piper voice model check (en_US-amy) =="
+if [[ -f "assets/voices/en_US-amy-medium.onnx" && -f "assets/voices/en_US-amy-medium.onnx.json" ]]; then
+  say_ok "en_US-amy model present"
+else
+  say_err "voice model missing (download .onnx & .json to assets/voices/)"
+fi
+
+echo "== Argos Translate check =="
+python - <<'PY'
+try:
+    import argostranslate.package, argostranslate.translate
+    print("OK: argostranslate import")
+    # Check ko->en installed
+    installed = argostranslate.package.get_installed_packages()
+    ko_en_ok = any(p.from_code=="ko" and p.to_code=="en" for p in installed)
+    print("OK: ko->en package installed" if ko_en_ok else "ERR: ko->en package NOT installed")
+except Exception as e:
+    print("ERR: argostranslate problem:", e)
+PY
