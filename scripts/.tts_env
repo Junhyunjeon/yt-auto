@@ -1,0 +1,14 @@
+# 기본 모델: 영국 영어 남성 (medium)
+export MODEL_PATH="assets/voices/en_GB-northern_english_male-medium.onnx"
+
+# 기본 출력 파일명(요청대로)
+export OUT_WAV_DEFAULT="output/mail_medium_northern.wav"
+
+# 자연스러움 튜닝 기본값
+export LENGTH_SCALE="1.03"
+export NOISE_SCALE="0.30"
+export NOISE_W_SCALE="0.70"
+export SENTENCE_SILENCE="0.25"
+
+# 볼륨은 필요 시만 조정 (기본 1.0)
+export VOLUME="1.0"
