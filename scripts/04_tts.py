@@ -1,45 +1,64 @@
-import pathlib, subprocess, typer, yaml
+import pathlib, subprocess, typer, yaml, os
 from loguru import logger
 
 app = typer.Typer()
 def load_cfg():
     with open("config.yaml","r") as f: return yaml.safe_load(f)
 
-def piper_tts(text, output_file):
-    """Generate TTS using piper-tts Python package"""
+def piper_tts(text, output_file, cfg):
+    """Generate TTS using piper binary"""
+    # Get piper settings from config or environment
+    piper_exec = os.getenv("PIPER_EXEC", "piper")
+    piper_model = os.getenv("PIPER_MODEL", f"{os.path.expanduser('~')}/piper_models/en_US-amy-medium.onnx")
+    
+    # Check if config specifies custom paths
+    if "paths" in cfg:
+        piper_exec = cfg["paths"].get("piper_exec", piper_exec)
+        piper_model = cfg["paths"].get("piper_model", piper_model)
+    
+    # Expand environment variables and home directory
+    piper_model = os.path.expandvars(os.path.expanduser(piper_model))
+    
+    # Check if piper binary exists
+    piper_check = subprocess.run(["which", piper_exec], capture_output=True, text=True)
+    if piper_check.returncode != 0:
+        logger.error(f"❌ Piper executable not found: {piper_exec}")
+        logger.error("   Fix: brew install piper")
+        logger.error("   Or download from: https://github.com/rhasspy/piper/releases")
+        logger.error("   Then add to PATH or set PIPER_EXEC environment variable")
+        raise SystemExit(1)
+    
+    # Check if model file exists
+    if not pathlib.Path(piper_model).exists():
+        logger.error(f"❌ Piper model not found: {piper_model}")
+        logger.error("   Fix: Download a model from https://github.com/rhasspy/piper/blob/master/VOICES.md")
+        logger.error(f"   Example: wget https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/amy/medium/en_US-amy-medium.onnx -P ~/piper_models/")
+        logger.error(f"   Then set PIPER_MODEL={piper_model} in .env")
+        raise SystemExit(1)
+    
+    # Run piper TTS
     try:
-        import piper
+        # Save text to temporary file (piper works better with file input)
+        temp_txt = pathlib.Path(output_file).parent / "temp_tts.txt"
+        temp_txt.write_text(text, encoding="utf-8")
         
-        # Use piper-tts to generate audio
-        # This is a simplified version - you may need to adjust based on actual piper-tts API
-        with open(output_file, 'wb') as f:
-            # For now, we'll create a simple wav file
-            # In a real implementation, you'd use the piper library properly
-            pass
+        cmd = [piper_exec, "--model", piper_model, "--output_file", str(output_file)]
         
-        # Alternative: use system command if piper binary is available
-        cmd = f'echo "{text}" | piper --model en_US-amy-low --output_file "{output_file}"'
-        try:
-            subprocess.run(cmd, shell=True, check=True, capture_output=True)
-        except subprocess.CalledProcessError:
-            logger.warning("Piper binary not found, using fallback TTS method")
-            # Create a dummy wav file for testing
-            import wave
-            with wave.open(str(output_file), 'wb') as wf:
-                wf.setnchannels(1)
-                wf.setsampwidth(2)
-                wf.setframerate(22050)
-                wf.writeframes(b'\x00' * 22050 * 2 * 5)  # 5 seconds of silence
+        with open(temp_txt, 'r') as stdin_file:
+            result = subprocess.run(cmd, stdin=stdin_file, capture_output=True, text=True)
+        
+        if result.returncode != 0:
+            logger.error(f"❌ Piper TTS failed: {result.stderr}")
+            raise SystemExit(1)
+        
+        # Clean up temp file
+        temp_txt.unlink(missing_ok=True)
+        
+        logger.info(f"✓ Generated TTS audio with Piper: {output_file}")
         
     except Exception as e:
-        logger.warning(f"TTS failed: {e}, creating dummy audio file")
-        # Create a dummy wav file for testing
-        import wave
-        with wave.open(str(output_file), 'wb') as wf:
-            wf.setnchannels(1)
-            wf.setsampwidth(2)
-            wf.setframerate(22050)
-            wf.writeframes(b'\x00' * 22050 * 2 * 5)  # 5 seconds of silence
+        logger.error(f"❌ TTS generation failed: {e}")
+        raise SystemExit(1)
 
 @app.command()
 def run(slug: str):
@@ -57,7 +76,7 @@ def run(slug: str):
         raise SystemExit("현재 스크립트는 piper 전용입니다.")
 
     wav = outdir/"voice_en.wav"
-    piper_tts(body, wav)
+    piper_tts(body, wav, cfg)
     logger.success(f"TTS -> {wav}")
 
 if __name__ == "__main__":

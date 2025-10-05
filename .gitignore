@@ -46,6 +46,7 @@ client_secret.json
 *.key
 *.pem
 config_local.yaml
+.env
 
 # Logs
 *.log

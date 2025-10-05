@@ -1,0 +1,5 @@
+pyyaml>=6.0.1
+loguru>=0.7.2
+tqdm>=4.66.5
+rich>=13.7.1
+# argostranslate는 시스템 종속이 강하므로 README에 별도 설치 안내 또는 optional extras로 분리 고려
