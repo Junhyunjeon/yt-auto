@@ -1,11 +1,38 @@
 # Configuration for YouTube automation pipeline
-translator: argos    # argos | google
-use_api: false      # Use offline translation by default
 
-# TTS settings  
+# Translation engines
+translate:
+  default_engine: claude
+
+  claude:
+    model: claude-sonnet-4-5-20250929  # Sonnet 4.5 (latest)
+    max_tokens: 4000
+    temperature: 0.3        # Default for general content
+    temperature_tech: 0.1   # For technical/factual content
+    timeout: 60
+    retries: 3
+    backoff: 2
+    log_path: logs/translate.log
+    chunk_size: 2000  # Characters per chunk for long texts
+
+  argos:
+    src: ko
+    tgt: en
+    max_len: 160
+    max_tokens: 40
+
+  glossary_path: assets/glossary.csv
+
+# TTS settings
 tts:
-  engine: piper     # piper | elevenlabs
-  voice: "en_US-amy"
+  engine: piper
+  voice_model_path: assets/voices/en_GB-northern_english_male-medium.onnx  # Path to .onnx model file
+  sample_rate: 22050
+  pause:
+    short: 0.30   # Comma, etc.
+    medium: 0.60  # . ? !
+    long: 1.00    # Paragraph boundary (blank line)
+  fallback_engine: null   # Use only if needed
 
 # File paths
 paths:
