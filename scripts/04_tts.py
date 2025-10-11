@@ -10,13 +10,14 @@ def piper_tts(text, output_file, cfg):
     # Get piper settings from config or environment
     piper_exec = os.getenv("PIPER_EXEC", "piper")
     piper_model = os.getenv("PIPER_MODEL", f"{os.path.expanduser('~')}/piper_models/en_US-amy-medium.onnx")
-    
+
     # Check if config specifies custom paths
     if "paths" in cfg:
         piper_exec = cfg["paths"].get("piper_exec", piper_exec)
         piper_model = cfg["paths"].get("piper_model", piper_model)
-    
+
     # Expand environment variables and home directory
+    piper_exec = os.path.expandvars(os.path.expanduser(piper_exec))
     piper_model = os.path.expandvars(os.path.expanduser(piper_model))
     
     # Check if piper binary exists
