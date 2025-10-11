@@ -8,6 +8,7 @@ A complete offline pipeline that transforms Korean scripts into English content 
 - **Translation**: Korean to English (with Argos Translate fallback)
 - **Content Generation**: Creates structured English markdown posts
 - **Text-to-Speech**: **OpenAI TTS (Onyx Natural) with natural breathing pauses** - Default high-quality narration
+  - **Common TTS Module**: Shared segmentation and post-processing for consistent results across engines
 - **Video Creation**: Creates MP4 videos with waveform visualization and titles
 - **Publishing**: Optional WordPress integration (configurable)
 
@@ -143,6 +144,21 @@ OPENAI_TTS_VOICE=onyx
 OPENAI_TTS_MODEL=tts-1
 OPENAI_TTS_FORMAT=wav
 OPENAI_TTS_PAUSE_PROFILE=natural
+```
+
+### TTS Common Module
+
+The pipeline uses a **shared segmentation and post-processing module** (`scripts/tts_common.py`) for consistent audio quality across all TTS engines:
+
+**Features**:
+- **Smart Segmentation**: Splits text by paragraphs/sentences with configurable max length (default 800 chars)
+- **Audio Processing**: Crossfade, fade in/out, normalization, speed adjustment
+- **Metrics**: Measures duration, RMS/peak levels, silence ratio
+- **Volume Matching**: Automatically balances volume between different engines
+
+**Test the module**:
+```bash
+bash scripts/smoke_tts_common.sh
 ```
 
 ### Other Configuration
