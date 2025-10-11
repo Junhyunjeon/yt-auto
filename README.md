@@ -205,6 +205,73 @@ Edit `config.yaml` to customize:
 - **Video Settings**: Resolution, FPS, background image
 - **Publishing**: WordPress and YouTube settings (disabled by default)
 
+## 🔄 Piper vs OpenAI TTS Comparison
+
+Run a fair A/B comparison with unified segmentation and post-processing:
+
+```bash
+# Quick comparison with defaults
+bash scripts/compare_tts.sh input/text.txt output/compare_demo
+
+# Or use Python script directly for more control
+python scripts/compare_tts.py input/text.txt --outdir output/compare_demo \
+  --style-prefix "Speak calmly and confidently, as if narrating a professional video." \
+  --pause-profile natural \
+  --openai-voice onyx \
+  --ab-swap-sec 8
+```
+
+**Prerequisites**:
+- `.env` with `OPENAI_API_KEY` set
+- Piper TTS installed (optional - comparison works with OpenAI only if Piper not available)
+- `PIPER_VOICE` in `.env` or pass `--piper-voice path/to/model.onnx`
+
+**Generated Outputs**:
+
+The comparison generates several files in the output directory:
+
+- `openai.wav` - Raw OpenAI TTS output
+- `openai_match.wav` - Volume-matched OpenAI audio
+- `piper.wav` - Raw Piper TTS output (if Piper installed)
+- `piper_match.wav` - Volume-matched Piper audio (if Piper installed)
+- `AB_openai_piper.wav` - A/B swap mix alternating between engines (if `--ab-swap-sec` specified)
+- `work/cmp_*/compare_report.json` - Comprehensive comparison metrics
+
+**Comparison Report Structure**:
+
+```json
+{
+  "input_file": "input/text.txt",
+  "slug": "cmp_abc123",
+  "settings": {
+    "pause_profile": "natural",
+    "fade_ms": 20,
+    "crossfade_ms": 50,
+    "max_chars": 800
+  },
+  "openai": {
+    "duration_sec": 45.2,
+    "rms_dbfs": -18.5,
+    "peak_dbfs": -3.2,
+    "silence_ratio": 12.3
+  },
+  "piper": {
+    "duration_sec": 43.8,
+    "rms_dbfs": -19.1,
+    "peak_dbfs": -4.5,
+    "silence_ratio": 10.5
+  },
+  "comparison": {
+    "duration_diff_sec": 1.4,
+    "duration_ratio": 1.032,
+    "rms_diff_db": 0.6,
+    "faster_engine": "piper"
+  }
+}
+```
+
+**Note**: If Piper is not installed, the script will skip Piper synthesis gracefully and still produce OpenAI outputs and report. This allows the comparison pipeline to work even when only one TTS engine is available.
+
 ## 🔧 System Requirements
 
 - macOS (tested on Mac Mini)

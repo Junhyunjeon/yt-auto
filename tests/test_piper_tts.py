@@ -110,21 +110,45 @@ class TestPiperTTSNotInstalled:
 
 
 class TestPiperIntegration:
-    """Integration tests for Piper TTS (to be implemented)"""
+    """Integration tests for Piper TTS"""
 
-    def test_placeholder_for_future_piper_wrapper(self):
-        """
-        Placeholder for future tests when piper_tts.py wrapper is created.
+    def test_piper_module_loads(self):
+        """Test that piper_tts module can be imported"""
+        from scripts import piper_tts
+        assert hasattr(piper_tts, 'have_piper')
+        assert hasattr(piper_tts, 'synthesize_with_piper')
+        assert hasattr(piper_tts, 'main')
 
-        When implemented, should test:
-        - Text segmentation using tts_common
-        - Calling piper binary with correct arguments
-        - Audio post-processing
-        - Volume matching
-        - Metrics reporting
-        """
-        # TODO: Implement when scripts/piper_tts.py exists
-        pytest.skip("piper_tts.py wrapper not yet implemented")
+    def test_piper_detection(self):
+        """Test Piper installation detection"""
+        from scripts.piper_tts import have_piper
+        # Should return boolean
+        result = have_piper()
+        assert isinstance(result, bool)
+
+    @pytest.mark.skipif(not PIPER_INSTALLED, reason="piper not installed")
+    def test_piper_main_with_missing_voice(self, tmp_path):
+        """Test that piper_tts handles missing voice model gracefully"""
+        import sys
+        from scripts import piper_tts
+
+        # Create test input
+        input_file = tmp_path / "input.txt"
+        input_file.write_text("Test.")
+
+        output_file = tmp_path / "output.wav"
+
+        # Simulate command-line with non-existent voice
+        sys.argv = [
+            "piper_tts.py",
+            str(input_file),
+            "--output", str(output_file),
+            "--voice", "/nonexistent/voice.onnx"
+        ]
+
+        # Should fail gracefully with exit code 1
+        result = piper_tts.main()
+        assert result == 1
 
 
 if __name__ == "__main__":
