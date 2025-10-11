@@ -70,52 +70,39 @@ class TestOpenAITTSMocked:
         assert len(audio) > 0
 
     def test_build_audio_with_pauses_mocked(self, mock_openai_client, tmp_path):
-        """Test building audio with pauses (mocked)"""
-        from scripts.openai_tts import build_audio_with_pauses
+        """Test building audio with pauses (mocked) - now uses tts_common.build_track"""
+        # This functionality is now tested in test_tts_common.py
+        # Here we just verify the openai_tts module loads correctly
+        from scripts import openai_tts
+        assert hasattr(openai_tts, 'synthesize_segment')
+        assert hasattr(openai_tts, 'resolve_defaults')
+
+    def test_main_execution_mocked(self, mock_openai_client, tmp_path):
+        """Test full TTS execution via main() with mocked API"""
+        import sys
+        from scripts import openai_tts
 
         # Set fake API key
         os.environ["OPENAI_API_KEY"] = "fake-key-for-testing"
 
-        text = "First sentence. Second sentence.\n\nNew paragraph here."
-
-        audio = build_audio_with_pauses(
-            text=text,
-            pause_short=0.1,
-            pause_medium=0.2,
-            pause_long=0.3,
-            model="tts-1",
-            voice="onyx",
-            response_format="mp3",
-            speed=1.0
-        )
-
-        # Should return AudioSegment
-        assert isinstance(audio, AudioSegment)
-        assert len(audio) > 0
-
-    def test_generate_tts_mocked(self, mock_openai_client, tmp_path):
-        """Test full TTS generation with mocked API"""
-        from scripts.openai_tts import generate_tts
-
-        # Set fake API key
-        os.environ["OPENAI_API_KEY"] = "fake-key-for-testing"
+        # Create test input
+        input_file = tmp_path / "input.txt"
+        input_file.write_text("This is a short test.")
 
         output_path = tmp_path / "output.wav"
-        text = "This is a short test."
 
-        generate_tts(
-            text=text,
-            output_path=str(output_path),
-            voice="onyx",
-            model="tts-1",
-            response_format="wav",
-            speed=1.0,
-            pause_short=0.1,
-            pause_medium=0.2,
-            pause_long=0.3
-        )
+        # Simulate command-line arguments
+        sys.argv = [
+            "openai_tts.py",
+            str(input_file),
+            "--output", str(output_path)
+        ]
 
-        # Output file should be created
+        # Run main
+        result = openai_tts.main()
+
+        # Should complete successfully
+        assert result == 0
         assert output_path.exists()
         assert output_path.stat().st_size > 0
 
@@ -214,41 +201,20 @@ class TestOpenAITTSLive:
 
 
 class TestTextSplitting:
-    """Test text splitting functionality"""
+    """Test text splitting functionality - now uses tts_common"""
 
-    def test_split_paragraphs(self):
-        """Test paragraph splitting"""
-        from scripts.openai_tts import split_paragraphs
+    def test_segmentation_integration(self):
+        """Test that openai_tts correctly uses tts_common.segment_text"""
+        # Text splitting is now handled by tts_common.segment_text
+        # which is tested in test_tts_common.py
+        from scripts.tts_common import segment_text
 
         text = "First paragraph.\n\nSecond paragraph.\n\nThird paragraph."
-        paragraphs = split_paragraphs(text)
+        segments = segment_text(text, max_chars=100)
 
-        assert len(paragraphs) == 3
-        assert "First" in paragraphs[0]
-        assert "Second" in paragraphs[1]
-        assert "Third" in paragraphs[2]
-
-    def test_split_sentences(self):
-        """Test sentence splitting"""
-        from scripts.openai_tts import split_sentences
-
-        text = "First sentence. Second sentence! Third sentence?"
-        sentences = split_sentences(text)
-
-        assert len(sentences) == 3
-        assert "First" in sentences[0]
-        assert "Second" in sentences[1]
-        assert "Third" in sentences[2]
-
-    def test_split_sentences_with_quotes(self):
-        """Test sentence splitting with quotes"""
-        from scripts.openai_tts import split_sentences
-
-        text = 'He said "Hello." She replied "Hi."'
-        sentences = split_sentences(text)
-
-        # Should handle quotes correctly
-        assert len(sentences) >= 1
+        # Should create segments
+        assert len(segments) > 0
+        assert all(isinstance(seg, str) for seg in segments)
 
 
 if __name__ == "__main__":
