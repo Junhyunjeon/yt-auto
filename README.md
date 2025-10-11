@@ -7,7 +7,7 @@ A complete offline pipeline that transforms Korean scripts into English content 
 - **Text Processing**: Cleans and prepares Korean input text
 - **Translation**: Korean to English (with Argos Translate fallback)
 - **Content Generation**: Creates structured English markdown posts
-- **Text-to-Speech**: Generates English audio using Piper TTS
+- **Text-to-Speech**: **OpenAI TTS (Onyx Natural) with natural breathing pauses** - Default high-quality narration
 - **Video Creation**: Creates MP4 videos with waveform visualization and titles
 - **Publishing**: Optional WordPress integration (configurable)
 
@@ -90,10 +90,67 @@ python scripts/06_publish.py wordpress $SLUG
 
 ## ⚙️ Configuration
 
+### Default TTS: Onyx Natural Profile
+
+The pipeline uses **OpenAI TTS with Onyx voice** by default with natural breathing pauses:
+
+```yaml
+# config.yaml
+tts:
+  engine: openai
+  default_preset: onyx_natural  # Deep, confident male voice
+
+openai:
+  tts:
+    voice: onyx                 # Deep male voice
+    model: tts-1                # Fast, cost-effective
+    format: wav
+    speed: 1.0
+    pause_profile: natural      # Natural breathing
+    pause_short: 0.25           # After commas
+    pause_medium: 0.50          # After sentences
+    pause_long: 0.80            # Between paragraphs
+```
+
+### Quick Usage
+
+```bash
+# Use default Onyx Natural (no options needed)
+python scripts/openai_tts.py input/text.txt --output output/audio.wav
+
+# Use a different preset
+python scripts/openai_tts.py input/text.txt --preset onyx_broadcast
+
+# Available presets (see presets.yaml):
+# - onyx_natural: Default, balanced narration
+# - onyx_broadcast: Authoritative, HD quality, slower pace
+# - onyx_fast: Quick briefings, tight pauses
+# - alloy_warm_low: Warm, emotional tone
+# - echo_clear: Clear, energetic
+# - fable_storytelling: Warm storytelling voice
+```
+
+### API Keys
+
+Set your OpenAI API key in `.env`:
+
+```bash
+# .env
+OPENAI_API_KEY=sk-proj-your-key-here
+
+# Optional: Override TTS defaults
+OPENAI_TTS_VOICE=onyx
+OPENAI_TTS_MODEL=tts-1
+OPENAI_TTS_FORMAT=wav
+OPENAI_TTS_PAUSE_PROFILE=natural
+```
+
+### Other Configuration
+
 Edit `config.yaml` to customize:
 
-- **Translation**: Currently uses fallback mode (Argos models need proper installation)
-- **TTS Engine**: Piper TTS (creates dummy audio for now)
+- **Translation**: Claude API or Argos Translate
+- **TTS Engine**: OpenAI (default) or Piper (fallback)
 - **Video Settings**: Resolution, FPS, background image
 - **Publishing**: WordPress and YouTube settings (disabled by default)
 
