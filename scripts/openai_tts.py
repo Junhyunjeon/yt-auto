@@ -1,19 +1,30 @@
 #!/usr/bin/env python3
 """
 OpenAI TTS - Generate audio using OpenAI Text-to-Speech API
-Supports multiple voices with natural pauses and breathing
+Refactored to use tts_common for segmentation and post-processing
 """
 
 import os
 import sys
-import re
 import io
-import subprocess
+import json
 import yaml
+import argparse
 from pathlib import Path
-from typing import List, Tuple, Dict, Any
+from typing import Dict, Any, List
 from openai import OpenAI
 from pydub import AudioSegment
+from loguru import logger
+
+# Import common TTS utilities
+try:
+    from tts_common import segment_text, build_track, measure, apply_style_prefix
+except ImportError:
+    # For when run from scripts/ directory
+    import sys
+    sys.path.insert(0, str(Path(__file__).parent))
+    from tts_common import segment_text, build_track, measure, apply_style_prefix
+
 
 # Load environment variables from .env file
 def load_env():
@@ -29,6 +40,7 @@ def load_env():
                     value = os.path.expanduser(value)
                     os.environ[key] = value
 
+
 def load_presets() -> Dict[str, Any]:
     """Load voice presets from presets.yaml"""
     presets_path = Path(__file__).parent.parent / "presets.yaml"
@@ -37,8 +49,9 @@ def load_presets() -> Dict[str, Any]:
             with open(presets_path) as f:
                 return yaml.safe_load(f) or {}
         except Exception as e:
-            print(f"⚠️  Failed to load presets.yaml: {e}")
+            logger.warning(f"Failed to load presets.yaml: {e}")
     return {}
+
 
 def load_config() -> Dict[str, Any]:
     """Load config.yaml for default settings"""
@@ -50,8 +63,9 @@ def load_config() -> Dict[str, Any]:
                 # Expand environment variables in config values
                 return expand_env_vars(config)
         except Exception as e:
-            print(f"⚠️  Failed to load config.yaml: {e}")
+            logger.warning(f"Failed to load config.yaml: {e}")
     return {}
+
 
 def expand_env_vars(obj):
     """Recursively expand environment variables in config"""
@@ -60,25 +74,16 @@ def expand_env_vars(obj):
     elif isinstance(obj, list):
         return [expand_env_vars(item) for item in obj]
     elif isinstance(obj, str):
-        # Handle ${VAR:-default} syntax
         expanded = os.path.expandvars(obj)
         expanded = os.path.expanduser(expanded)
         return expanded
     return obj
 
-load_env()
 
-# Load configuration
+# Initialize
+load_env()
 CONFIG = load_config()
 PRESETS = load_presets()
-
-# Configuration with fallbacks
-API_KEY = os.getenv("OPENAI_API_KEY")
-DEFAULT_MODEL = os.getenv("OPENAI_TTS_MODEL", "tts-1")
-DEFAULT_VOICE = os.getenv("OPENAI_TTS_VOICE", "onyx")  # Changed default to onyx
-DEFAULT_FORMAT = os.getenv("OPENAI_TTS_FORMAT", "wav")
-DEFAULT_SPEED = float(os.getenv("OPENAI_TTS_SPEED", "1.0"))
-DEFAULT_PAUSE_PROFILE = os.getenv("OPENAI_TTS_PAUSE_PROFILE", "natural")
 
 # Voice categories
 MALE_VOICES = ["alloy", "echo", "fable", "onyx"]
@@ -92,7 +97,7 @@ PAUSE_PROFILES = {
     "tight": {"short": 0.15, "medium": 0.35, "long": 0.60},
 }
 
-# Voice presets - merge presets.yaml with hardcoded defaults
+# Built-in voice presets
 _BUILTIN_PRESETS = {
     "onyx_fast": {
         "voice": "onyx",
@@ -124,45 +129,14 @@ _BUILTIN_PRESETS = {
         "pause_short": 0.25,
         "pause_medium": 0.50,
         "pause_long": 0.80,
+        "fade_ms": 20,
+        "crossfade_ms": 50,
         "description": "Natural breathing with onyx voice (default)"
     },
 }
 
 # Merge loaded presets with built-in presets (loaded take precedence)
 VOICE_PRESETS = {**_BUILTIN_PRESETS, **PRESETS}
-
-# Text segmentation patterns
-SENT_END = re.compile(r'([\.!?。．]+[)\"\'\u00BB]*)(\s+)')
-CLAUSE_SPLIT = re.compile(r'([,;:\u2014\u2013])')
-
-
-def split_paragraphs(text: str) -> List[str]:
-    """Split text into paragraphs (double newline)"""
-    return [p.strip() for p in re.split(r'\n\s*\n', text.strip()) if p.strip()]
-
-
-def split_sentences(paragraph: str) -> List[str]:
-    """Split paragraph into sentences"""
-    sentences = []
-    parts = SENT_END.split(paragraph)
-
-    i = 0
-    while i < len(parts):
-        if i + 2 < len(parts) and parts[i+1]:  # Has end marker and space
-            sentences.append((parts[i] + parts[i+1]).strip())
-            i += 3  # Skip text, end marker, space
-        elif parts[i].strip():
-            sentences.append(parts[i].strip())
-            i += 1
-        else:
-            i += 1
-
-    return [s for s in sentences if s]
-
-
-def should_add_clause_pause(text: str, min_length: int = 12) -> bool:
-    """Check if clause pause should be added (prevent excessive pauses)"""
-    return len(text) >= min_length
 
 
 def synthesize_segment(client: OpenAI, text: str, model: str, voice: str,
@@ -181,223 +155,88 @@ def synthesize_segment(client: OpenAI, text: str, model: str, voice: str,
         return AudioSegment.from_file(io.BytesIO(audio_data), format=response_format)
 
     except Exception as e:
-        print(f"⚠️  Synthesis error: {e}")
+        logger.error(f"Synthesis error: {e}")
         # Return silent segment on error
         return AudioSegment.silent(duration=100)
 
 
-def build_audio_with_pauses(
-    text: str,
-    pause_short: float,
-    pause_medium: float,
-    pause_long: float,
-    model: str,
-    voice: str,
-    response_format: str = "mp3",
-    speed: float = 1.0,
-    normalize: bool = False,
-    warmth_db: float = 0.0
-) -> AudioSegment:
+def resolve_defaults(args: argparse.Namespace, config: Dict, presets: Dict) -> argparse.Namespace:
     """
-    Build complete audio with natural pauses between sentences/paragraphs
+    Resolve configuration priority: CLI args > preset > config.yaml > env > hardcoded defaults
 
     Args:
-        text: Full text to synthesize
-        pause_short: Pause after commas/semicolons (seconds)
-        pause_medium: Pause after sentence endings (seconds)
-        pause_long: Pause between paragraphs (seconds)
-        model: TTS model (tts-1 or tts-1-hd)
-        voice: Voice name
-        response_format: Audio format (mp3, wav, etc)
-        speed: Playback speed multiplier (0.95-1.05 recommended)
-        normalize: Apply volume normalization
-        warmth_db: Low-frequency boost in dB (0-4)
+        args: Parsed command-line arguments
+        config: Loaded config.yaml
+        presets: Loaded presets.yaml
 
     Returns:
-        Combined AudioSegment with pauses
+        args with all fields filled in with appropriate defaults
     """
-    if not API_KEY:
-        raise EnvironmentError("OPENAI_API_KEY not found in environment")
+    # Apply preset if specified
+    preset = {}
+    if args.preset and args.preset in presets:
+        preset = presets[args.preset]
+        logger.info(f"Using preset: {args.preset} - {preset.get('description', '')}")
 
-    client = OpenAI(api_key=API_KEY)
-    track = AudioSegment.silent(duration=0)
+    # Helper to get value with priority: CLI > preset > config > env > default
+    def get_value(arg_name, preset_key, config_path, env_var, default):
+        # If explicitly set via CLI
+        arg_val = getattr(args, arg_name, None)
+        if arg_val is not None:
+            return arg_val
 
-    paragraphs = split_paragraphs(text)
-    total_segments = sum(len(split_sentences(p)) for p in paragraphs)
-    current_segment = 0
+        # Check preset
+        if preset_key in preset:
+            return preset[preset_key]
 
-    print(f"\n🎙️  Synthesizing {total_segments} segments...")
-    print(f"   Paragraphs: {len(paragraphs)}")
-    print(f"   Pauses: short={pause_short}s, medium={pause_medium}s, long={pause_long}s")
+        # Check config.yaml (navigate nested dict)
+        config_val = config
+        for key in config_path.split('.'):
+            config_val = config_val.get(key, {}) if isinstance(config_val, dict) else {}
+        if config_val != {}:
+            return config_val
 
-    for pi, para in enumerate(paragraphs):
-        if not para.strip():
-            continue
+        # Check environment
+        if env_var and env_var in os.environ:
+            env_val = os.environ[env_var]
+            # Type conversion
+            if isinstance(default, float):
+                return float(env_val)
+            elif isinstance(default, int):
+                return int(env_val)
+            return env_val
 
-        sentences = split_sentences(para)
+        # Return default
+        return default
 
-        for si, sent in enumerate(sentences):
-            current_segment += 1
-            print(f"   [{current_segment}/{total_segments}] Synthesizing: {sent[:60]}...")
+    # Apply all defaults
+    args.model = get_value('model', 'model', 'tts.model', 'OPENAI_TTS_MODEL', 'tts-1')
+    args.voice = get_value('voice', 'voice', 'tts.voice', 'OPENAI_TTS_VOICE', 'onyx')
+    args.format = get_value('format', 'format', 'tts.format', 'OPENAI_TTS_FORMAT', 'wav')
+    args.speed = get_value('speed', 'speed', 'tts.speed', 'OPENAI_TTS_SPEED', 1.0)
 
-            # Synthesize sentence
-            audio = synthesize_segment(client, sent, model, voice, response_format)
-            track += audio
+    # Pause profile
+    pause_profile_name = get_value('pause_profile', 'pause_profile', 'tts.pause_profile',
+                                    'OPENAI_TTS_PAUSE_PROFILE', 'natural')
+    profile = PAUSE_PROFILES.get(pause_profile_name, PAUSE_PROFILES['natural'])
 
-            # Add pause after sentence
-            if si < len(sentences) - 1:  # Not last sentence in paragraph
-                # Check if sentence ends with strong punctuation
-                if sent.rstrip().endswith(('.', '!', '?', '。', '．')):
-                    track += AudioSegment.silent(duration=int(pause_medium * 1000))
-                # Check for clause markers (commas, semicolons)
-                elif CLAUSE_SPLIT.search(sent) and should_add_clause_pause(sent):
-                    track += AudioSegment.silent(duration=int(pause_short * 1000))
+    args.pause_short = get_value('pause_short', 'pause_short', 'tts.pause_short', None, profile['short'])
+    args.pause_medium = get_value('pause_medium', 'pause_medium', 'tts.pause_medium', None, profile['medium'])
+    args.pause_long = get_value('pause_long', 'pause_long', 'tts.pause_long', None, profile['long'])
 
-        # Add long pause between paragraphs
-        if pi < len(paragraphs) - 1:
-            track += AudioSegment.silent(duration=int(pause_long * 1000))
+    # Processing options
+    args.fade_ms = get_value('fade_ms', 'fade_ms', 'tts.fade_ms', None, 20)
+    args.crossfade_ms = get_value('crossfade_ms', 'crossfade_ms', 'tts.crossfade_ms', None, 50)
+    args.max_chars = get_value('max_chars', 'max_chars', 'tts.max_chars', None, 800)
+    args.style_prefix = get_value('style_prefix', 'style_prefix', 'tts.style_prefix', None, None)
 
-    print(f"\n✅ Synthesis complete ({len(track)/1000:.1f} seconds)")
-
-    # Speed adjustment (±5% max recommended)
-    if abs(speed - 1.0) > 0.001:
-        if abs(speed - 1.0) > 0.05:
-            print(f"⚠️  Speed {speed} is outside recommended range (0.95-1.05)")
-
-        print(f"   Applying speed adjustment: {speed}x")
-        new_frame_rate = int(track.frame_rate / speed)
-        track = track._spawn(track.raw_data, overrides={
-            "frame_rate": new_frame_rate
-        }).set_frame_rate(track.frame_rate)
-
-    # Normalization
-    if normalize:
-        print("   Applying normalization...")
-        track = track.normalize(headroom=0.1)
-
-    # Warmth boost (low frequency enhancement)
-    if warmth_db > 0:
-        print(f"   Applying warmth boost: +{warmth_db}dB @ 140Hz")
-        track = apply_warmth_boost(track, warmth_db)
-
-    return track
-
-
-def apply_warmth_boost(audio: AudioSegment, boost_db: float) -> AudioSegment:
-    """
-    Apply low-frequency boost using ffmpeg equalizer
-
-    Args:
-        audio: Input audio
-        boost_db: Boost amount in dB (1-4 recommended)
-
-    Returns:
-        Processed audio with enhanced warmth
-    """
-    if boost_db <= 0 or boost_db > 4:
-        return audio
-
-    try:
-        # Export to temp file
-        import tempfile
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_in:
-            audio.export(temp_in.name, format="wav")
-            temp_in_path = temp_in.name
-
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_out:
-            temp_out_path = temp_out.name
-
-        # Apply equalizer filter
-        cmd = [
-            "ffmpeg", "-y", "-i", temp_in_path,
-            "-af", f"equalizer=f=140:width_type=o:width=2:g={boost_db}",
-            temp_out_path
-        ]
-
-        subprocess.run(cmd, capture_output=True, check=True)
-
-        # Load processed audio
-        result = AudioSegment.from_wav(temp_out_path)
-
-        # Cleanup
-        os.unlink(temp_in_path)
-        os.unlink(temp_out_path)
-
-        return result
-
-    except Exception as e:
-        print(f"⚠️  Warmth boost failed: {e}")
-        return audio
-
-
-def generate_tts(
-    text: str,
-    output_path: str,
-    voice: str = DEFAULT_VOICE,
-    model: str = DEFAULT_MODEL,
-    response_format: str = DEFAULT_FORMAT,
-    speed: float = 1.0,
-    pause_short: float = 0.25,
-    pause_medium: float = 0.50,
-    pause_long: float = 0.80,
-    normalize: bool = False,
-    warmth_db: float = 0.0
-):
-    """
-    Generate TTS audio with natural pauses
-
-    Args:
-        text: Text to synthesize
-        output_path: Output file path
-        voice: Voice name
-        model: TTS model
-        response_format: Audio format
-        speed: Playback speed
-        pause_short/medium/long: Pause durations
-        normalize: Apply normalization
-        warmth_db: Low-frequency boost
-    """
-    print(f"🎙️  Generating audio with pauses...")
-    print(f"   Voice: {voice}")
-    print(f"   Model: {model}")
-    print(f"   Format: {response_format}")
-    print(f"   Speed: {speed}x")
-    print(f"   Text length: {len(text)} characters")
-
-    # Build audio with pauses
-    audio = build_audio_with_pauses(
-        text=text,
-        pause_short=pause_short,
-        pause_medium=pause_medium,
-        pause_long=pause_long,
-        model=model,
-        voice=voice,
-        response_format="mp3",  # Use MP3 for synthesis, convert to final format
-        speed=speed,
-        normalize=normalize,
-        warmth_db=warmth_db
-    )
-
-    # Ensure output directory exists
-    output_dir = Path(output_path).parent
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    # Export to final format
-    print(f"\n💾 Exporting to {response_format}...")
-    audio.export(output_path, format=response_format)
-
-    file_size = os.path.getsize(output_path) / (1024 * 1024)
-    print(f"✅ Audio generated: {output_path}")
-    print(f"   Duration: {len(audio)/1000:.1f} seconds")
-    print(f"   File size: {file_size:.2f} MB")
+    return args
 
 
 def main():
     """CLI interface"""
-    import argparse
-
     parser = argparse.ArgumentParser(
-        description="OpenAI TTS - Generate audio with natural pauses",
+        description="OpenAI TTS - Generate audio with tts_common integration",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=f"""
 Pause Profiles:
@@ -409,135 +248,151 @@ Voice Presets:
   {chr(10).join(f"  {name}: {info['description']}" for name, info in VOICE_PRESETS.items())}
 
 Examples:
-  # Basic with pauses
-  {sys.argv[0]} input.txt --voice onyx --pause-profile natural
+  # Basic usage (uses onyx_natural preset by default)
+  {sys.argv[0]} input.txt --output output/audio.wav
 
-  # Broadcast preset
-  {sys.argv[0]} input.txt --preset onyx_broadcast
+  # With metrics export
+  {sys.argv[0]} input.txt --output output/audio.wav --json-out metrics.json
 
-  # Custom pauses
-  {sys.argv[0]} input.txt --voice onyx --pause-short 0.2 --pause-medium 0.5
+  # Custom voice and pauses
+  {sys.argv[0]} input.txt --output output/audio.wav --voice alloy --pause-profile tight
+
+  # With style prefix
+  {sys.argv[0]} input.txt --output output/audio.wav --style-prefix "Speak calmly and confidently."
         """
     )
 
     parser.add_argument("input", help="Input text file")
-    parser.add_argument("--output", "-o", help="Output file path")
+    parser.add_argument("--output", "-o", required=True, help="Output file path")
 
     # Voice selection
-    parser.add_argument("--voice", "-v", default=DEFAULT_VOICE, choices=ALL_VOICES,
-                        help="Voice to use")
+    parser.add_argument("--voice", "-v", choices=ALL_VOICES, help="Voice to use")
     parser.add_argument("--preset", choices=list(VOICE_PRESETS.keys()),
-                        help="Use voice preset (overrides other voice settings)")
+                        help="Use voice preset (overrides other settings)")
 
-    # Model
-    parser.add_argument("--model", "-m", default=DEFAULT_MODEL,
-                        choices=["tts-1", "tts-1-hd"],
+    # Model and format
+    parser.add_argument("--model", "-m", choices=["tts-1", "tts-1-hd"],
                         help="TTS model (tts-1-hd for higher quality)")
-
-    # Audio format
-    parser.add_argument("--format", "-f", default=DEFAULT_FORMAT,
-                        choices=["mp3", "opus", "aac", "flac", "wav", "pcm"],
+    parser.add_argument("--format", "-f", choices=["mp3", "opus", "aac", "flac", "wav", "pcm"],
                         help="Output audio format")
 
     # Pause control
     parser.add_argument("--pause-profile", choices=list(PAUSE_PROFILES.keys()),
-                        default="natural", help="Preset pause profile")
+                        help="Preset pause profile")
     parser.add_argument("--pause-short", type=float, help="Pause after commas (seconds)")
     parser.add_argument("--pause-medium", type=float, help="Pause after sentences (seconds)")
     parser.add_argument("--pause-long", type=float, help="Pause between paragraphs (seconds)")
 
-    # Speed and effects
-    parser.add_argument("--speed", "-s", type=float, default=1.0,
-                        help="Playback speed (0.95-1.05 recommended)")
-    parser.add_argument("--normalize", action="store_true",
-                        help="Apply volume normalization")
-    parser.add_argument("--warmth-db", type=float, default=0.0,
-                        help="Low-frequency boost in dB (0-4, for warmth)")
+    # Processing options (NEW)
+    parser.add_argument("--fade-ms", type=int, help="Fade in/out duration (milliseconds)")
+    parser.add_argument("--crossfade-ms", type=int, help="Crossfade duration between chunks (ms)")
+    parser.add_argument("--max-chars", type=int, help="Maximum characters per segment")
+    parser.add_argument("--style-prefix", help="Style instruction to prepend to text")
 
-    # Multiple voices
-    parser.add_argument("--male-voices", action="store_true",
-                        help="Generate all male voices (ignores --voice)")
+    # Speed and effects
+    parser.add_argument("--speed", "-s", type=float, help="Playback speed (0.95-1.05 recommended)")
+    parser.add_argument("--normalize", action="store_true", help="Apply volume normalization")
+
+    # Output options (NEW)
+    parser.add_argument("--json-out", help="Save metrics to JSON file")
 
     args = parser.parse_args()
 
     # Read input text
     try:
-        with open(args.input, "r", encoding="utf-8") as f:
-            text = f.read().strip()
+        text = Path(args.input).read_text(encoding="utf-8").strip()
     except Exception as e:
-        print(f"❌ Failed to read input file: {e}")
+        logger.error(f"Failed to read input file: {e}")
         return 1
 
     if not text:
-        print("❌ Input file is empty")
+        logger.error("Input file is empty")
         return 1
 
-    # Apply default preset from config if no preset specified
-    if not args.preset and not any(v in sys.argv for v in ['--voice', '-v']):
-        default_preset_name = CONFIG.get('tts', {}).get('default_preset', 'onyx_natural')
-        if default_preset_name in VOICE_PRESETS:
-            args.preset = default_preset_name
-            print(f"\n📋 Using default preset from config: {default_preset_name}")
+    # Resolve all configuration with proper priority
+    args = resolve_defaults(args, CONFIG, VOICE_PRESETS)
 
-    # Apply preset if specified
-    if args.preset:
-        preset = VOICE_PRESETS[args.preset]
-        print(f"\n📋 Using preset: {args.preset}")
-        print(f"   {preset['description']}")
-
-        # Override with preset values (CLI args take precedence)
-        if not any(v in sys.argv for v in ['--voice', '-v']):
-            args.voice = preset.get("voice", args.voice)
-        if not any(v in sys.argv for v in ['--model', '-m']):
-            args.model = preset.get("model", args.model)
-        if '--format' not in sys.argv and '-f' not in sys.argv:
-            args.format = preset.get("format", args.format)
-        if '--pause-profile' not in sys.argv:
-            args.pause_profile = preset.get("pause_profile", args.pause_profile)
-        if '--speed' not in sys.argv and '-s' not in sys.argv:
-            args.speed = preset.get("speed", args.speed)
-
-        # Apply individual pause values from preset if not specified
-        if '--pause-short' not in sys.argv and 'pause_short' in preset:
-            args.pause_short = preset['pause_short']
-        if '--pause-medium' not in sys.argv and 'pause_medium' in preset:
-            args.pause_medium = preset['pause_medium']
-        if '--pause-long' not in sys.argv and 'pause_long' in preset:
-            args.pause_long = preset['pause_long']
-
-    # Get pause durations from profile
-    profile = PAUSE_PROFILES[args.pause_profile]
-    pause_short = args.pause_short if args.pause_short is not None else profile["short"]
-    pause_medium = args.pause_medium if args.pause_medium is not None else profile["medium"]
-    pause_long = args.pause_long if args.pause_long is not None else profile["long"]
-
-    # Default output path
-    if not args.output:
-        base_name = Path(args.input).stem
-        args.output = f"output/{base_name}_{args.voice}.{args.format}"
-
-    # Generate audio
-    try:
-        generate_tts(
-            text=text,
-            output_path=args.output,
-            voice=args.voice,
-            model=args.model,
-            response_format=args.format,
-            speed=args.speed,
-            pause_short=pause_short,
-            pause_medium=pause_medium,
-            pause_long=pause_long,
-            normalize=args.normalize,
-            warmth_db=args.warmth_db
-        )
-        return 0
-
-    except Exception as e:
-        print(f"\n❌ Generation failed: {e}")
-        import traceback
-        traceback.print_exc()
+    # Validate API key
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        logger.error("OPENAI_API_KEY not found in environment")
         return 1
+
+    client = OpenAI(api_key=api_key)
+
+    # Apply style prefix if specified
+    if args.style_prefix:
+        text = apply_style_prefix(text, args.style_prefix)
+        logger.info(f"Applied style prefix: {args.style_prefix[:50]}...")
+
+    # Segment text using tts_common
+    segments = segment_text(text, max_chars=args.max_chars, mode="sentence")
+    logger.info(f"Segmented into {len(segments)} chunks (max {args.max_chars} chars each)")
+
+    # Synthesize each segment
+    logger.info(f"🎙️  Synthesizing with OpenAI TTS...")
+    logger.info(f"   Voice: {args.voice}, Model: {args.model}, Format: {args.format}")
+    logger.info(f"   Pauses: short={args.pause_short}s, medium={args.pause_medium}s, long={args.pause_long}s")
+
+    chunks: List[AudioSegment] = []
+    for i, seg in enumerate(segments, 1):
+        logger.info(f"   [{i}/{len(segments)}] Synthesizing: {seg[:60]}...")
+        audio = synthesize_segment(client, seg, args.model, args.voice, "mp3")
+        chunks.append(audio)
+
+    # Build track using tts_common
+    logger.info("Building final track with pauses and crossfades...")
+    track = build_track(
+        chunks,
+        pause_short=args.pause_short,
+        pause_medium=args.pause_medium,
+        pause_long=args.pause_long,
+        fade_ms=args.fade_ms,
+        crossfade_ms=args.crossfade_ms,
+        normalize=args.normalize,
+        speed=args.speed
+    )
+
+    # Ensure output directory exists
+    output_path = Path(args.output)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Export to final format
+    logger.info(f"Exporting to {args.format}...")
+    track.export(str(output_path), format=args.format)
+
+    # Measure and log metrics
+    metrics = measure(track)
+    file_size_mb = output_path.stat().st_size / (1024 * 1024)
+
+    logger.success(f"✅ Audio generated: {output_path}")
+    logger.info(f"   Duration: {metrics['duration_sec']:.2f}s")
+    logger.info(f"   RMS: {metrics['rms_dbfs']:.1f} dBFS")
+    logger.info(f"   Peak: {metrics['peak_dbfs']:.1f} dBFS")
+    logger.info(f"   Silence: {metrics['silence_ratio']:.1f}%")
+    logger.info(f"   File size: {file_size_mb:.2f} MB")
+
+    # Save metrics to JSON if requested
+    if args.json_out:
+        json_path = Path(args.json_out)
+        json_path.parent.mkdir(parents=True, exist_ok=True)
+
+        metrics_full = {
+            **metrics,
+            "file_size_mb": round(file_size_mb, 2),
+            "segments": len(segments),
+            "voice": args.voice,
+            "model": args.model,
+            "format": args.format,
+            "speed": args.speed
+        }
+
+        with open(json_path, 'w') as f:
+            json.dump(metrics_full, f, indent=2)
+
+        logger.info(f"   Metrics saved to: {json_path}")
+
+    return 0
 
 
 if __name__ == "__main__":

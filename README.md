@@ -113,23 +113,58 @@ openai:
     pause_long: 0.80            # Between paragraphs
 ```
 
-### Quick Usage
+### OpenAI TTS Usage
+
+#### Basic Usage
 
 ```bash
 # Use default Onyx Natural (no options needed)
 python scripts/openai_tts.py input/text.txt --output output/audio.wav
 
-# Use a different preset
-python scripts/openai_tts.py input/text.txt --preset onyx_broadcast
+# With metrics export
+python scripts/openai_tts.py input/text.txt --output output/audio.wav --json-out metrics.json
 
-# Available presets (see presets.yaml):
-# - onyx_natural: Default, balanced narration
-# - onyx_broadcast: Authoritative, HD quality, slower pace
-# - onyx_fast: Quick briefings, tight pauses
-# - alloy_warm_low: Warm, emotional tone
-# - echo_clear: Clear, energetic
-# - fable_storytelling: Warm storytelling voice
+# Use a different preset
+python scripts/openai_tts.py input/text.txt --output output/audio.wav --preset onyx_broadcast
 ```
+
+#### Available Presets
+
+- `onyx_natural`: Default, balanced narration (default)
+- `onyx_broadcast`: Authoritative, HD quality, slower pace
+- `onyx_fast`: Quick briefings, tight pauses
+- `alloy_warm_low`: Warm, emotional tone
+
+#### Advanced Options
+
+```bash
+# Custom voice and pauses
+python scripts/openai_tts.py input/text.txt --output output/audio.wav \
+  --voice alloy --pause-profile tight
+
+# With style prefix for better narration
+python scripts/openai_tts.py input/text.txt --output output/audio.wav \
+  --style-prefix "Speak calmly and confidently with emphasis."
+
+# Fine-tune audio processing
+python scripts/openai_tts.py input/text.txt --output output/audio.wav \
+  --fade-ms 30 --crossfade-ms 100 --max-chars 600 --normalize
+
+# Export metrics for analysis
+python scripts/openai_tts.py input/text.txt --output output/audio.wav \
+  --json-out work/metrics.json
+```
+
+#### New Options (Common TTS Integration)
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--fade-ms` | 20 | Fade in/out duration (milliseconds) |
+| `--crossfade-ms` | 50 | Crossfade duration between segments (ms) |
+| `--max-chars` | 800 | Maximum characters per segment |
+| `--style-prefix` | None | Style instruction to prepend to text |
+| `--json-out` | None | Save metrics to JSON file |
+| `--normalize` | False | Apply volume normalization |
 
 ### API Keys
 
