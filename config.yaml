@@ -25,14 +25,34 @@ translate:
 
 # TTS settings
 tts:
-  engine: piper
-  voice_model_path: assets/voices/en_GB-northern_english_male-medium.onnx  # Path to .onnx model file
+  engine: openai  # Default: OpenAI TTS (onyx_natural preset)
+  default_preset: onyx_natural  # Use onyx_natural by default
   sample_rate: 22050
-  pause:
-    short: 0.30   # Comma, etc.
-    medium: 0.60  # . ? !
-    long: 1.00    # Paragraph boundary (blank line)
-  fallback_engine: null   # Use only if needed
+  normalize: true
+  crossfade_ms: 30
+  fallback_engine: piper   # Fallback to Piper if OpenAI fails
+
+  # Piper settings (legacy/fallback)
+  piper:
+    voice_model_path: assets/voices/en_GB-northern_english_male-medium.onnx
+    pause:
+      short: 0.30
+      medium: 0.60
+      long: 1.00
+
+# OpenAI TTS settings
+openai:
+  enabled: true
+  tts:
+    model: "${OPENAI_TTS_MODEL:-tts-1}"
+    voice: "${OPENAI_TTS_VOICE:-onyx}"
+    format: "${OPENAI_TTS_FORMAT:-wav}"
+    speed: "${OPENAI_TTS_SPEED:-1.0}"
+    pause_profile: "${OPENAI_TTS_PAUSE_PROFILE:-natural}"
+    pause_short: "${OPENAI_TTS_PAUSE_SHORT:-0.25}"
+    pause_medium: "${OPENAI_TTS_PAUSE_MEDIUM:-0.50}"
+    pause_long: "${OPENAI_TTS_PAUSE_LONG:-0.80}"
+    chunk_chars: 1600  # Max characters per synthesis chunk
 
 # File paths
 paths:
