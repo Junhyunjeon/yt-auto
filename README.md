@@ -272,6 +272,37 @@ The comparison generates several files in the output directory:
 
 **Note**: If Piper is not installed, the script will skip Piper synthesis gracefully and still produce OpenAI outputs and report. This allows the comparison pipeline to work even when only one TTS engine is available.
 
+### Exporting Comparison Reports
+
+Aggregate multiple `compare_report.json` files into CSV/Markdown for analysis:
+
+```bash
+# Default: scan work/*/compare_report.json and write to output/reports/
+python3 scripts/compare_report_to_md.py
+
+# Or via shell helper
+bash scripts/export_reports.sh output/reports "work/*/compare_report.json"
+
+# With sorting and limit
+python3 scripts/compare_report_to_md.py --sort "openai_rms,-openai_duration" --limit 10
+```
+
+**Outputs:**
+- `output/reports/tts_compare_YYYYMMDD_HHMMSS.csv` - Spreadsheet-ready format
+- `output/reports/tts_compare_YYYYMMDD_HHMMSS.md` - Markdown table for documentation
+
+**Options:**
+- `--work-glob`: Glob pattern to scan reports (default: `work/*/compare_report.json`)
+- `--outdir`: Output directory (default: `output/reports`)
+- `--sort`: Sort by fields, e.g., `openai_rms,-openai_duration` (- for descending)
+- `--limit`: Cap number of rows
+
+**Use Cases:**
+- Track audio quality metrics over time
+- Compare different TTS settings
+- Share results with team (CSV import to spreadsheet)
+- Document comparison results in pull requests (Markdown)
+
 ## 🔧 System Requirements
 
 - macOS (tested on Mac Mini)
