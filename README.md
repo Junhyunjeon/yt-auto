@@ -239,6 +239,66 @@ brew install ffmpeg
 - ✅ File structure: Proper organization
 - ⚠️ WordPress publishing: Framework ready (needs configuration)
 
+## 🧪 Testing
+
+### Running Tests
+
+The project includes comprehensive test coverage for TTS functionality:
+
+```bash
+# Quick test run
+make test
+
+# Verbose output
+make test-v
+
+# With coverage report
+make cov
+
+# Install test dependencies
+make install-dev
+```
+
+### Test Organization
+
+```
+tests/
+  test_tts_common.py      # Unit tests for text segmentation and audio processing
+  test_openai_tts.py      # OpenAI TTS tests (mocked + optional live)
+  test_piper_tts.py       # Piper TTS tests (conditional on installation)
+  test_compare_tts.py     # Integration tests for TTS comparison
+  data/
+    sample_short.txt      # Test input text
+    fake.wav              # Audio fixtures
+    silence_500ms.wav
+```
+
+### Test Coverage
+
+- **Text Segmentation**: Paragraph/sentence splitting, max character limits
+- **Audio Processing**: Fades, crossfades, normalization, speed adjustment
+- **Metrics**: Duration, RMS/peak levels, silence ratio
+- **Volume Matching**: Automatic level balancing between engines
+- **API Mocking**: Fast tests without API costs
+- **Optional Live Tests**: Set `RUN_LIVE_TTS=1` with valid `OPENAI_API_KEY`
+
+### Continuous Integration
+
+Tests run automatically on GitHub Actions for all pushes and PRs. See `.github/workflows/ci-tests.yml`.
+
+### Running Live API Tests
+
+```bash
+# Set environment variables
+export OPENAI_API_KEY=sk-proj-your-key-here
+export RUN_LIVE_TTS=1
+
+# Run OpenAI live tests only
+pytest tests/test_openai_tts.py::TestOpenAITTSLive -v
+```
+
+**Note**: Live tests use very short text samples to minimize API costs.
+
 ## 🔮 Next Steps
 
 1. **Fix Argos Translation**: Resolve Python lzma dependency

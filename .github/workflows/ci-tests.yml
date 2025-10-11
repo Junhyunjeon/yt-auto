@@ -1,0 +1,50 @@
+name: Tests
+
+on:
+  push:
+    branches: [ main, feat/* ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Create virtual environment
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          pip install -U pip
+
+      - name: Install dependencies
+        run: |
+          source .venv/bin/activate
+          pip install -r requirements.txt
+
+      - name: Install test dependencies
+        run: |
+          source .venv/bin/activate
+          pip install -r requirements-dev.txt
+
+      - name: Install ffmpeg
+        run: brew install ffmpeg
+
+      - name: Run tests
+        run: |
+          source .venv/bin/activate
+          pytest -v --cov=scripts --cov-report=term-missing
+
+      - name: Upload coverage
+        if: always()
+        uses: codecov/codecov-action@v3
+        with:
+          fail_ci_if_error: false
