@@ -1,0 +1,68 @@
+# TTS Voice Presets
+# Define reusable voice configurations for consistent narration styles
+
+onyx_natural:
+  description: "Natural breathing with onyx voice (default)"
+  voice: onyx
+  model: tts-1
+  format: wav
+  speed: 1.0
+  pause_profile: natural
+  pause_short: 0.25
+  pause_medium: 0.50
+  pause_long: 0.80
+
+onyx_broadcast:
+  description: "Authoritative broadcast tone with rich detail"
+  voice: onyx
+  model: tts-1-hd
+  format: wav
+  speed: 0.98
+  pause_profile: broadcast
+  pause_short: 0.30
+  pause_medium: 0.60
+  pause_long: 1.00
+
+onyx_fast:
+  description: "Fast narration for quick briefings/news"
+  voice: onyx
+  model: tts-1
+  format: wav
+  speed: 1.02
+  pause_profile: tight
+  pause_short: 0.15
+  pause_medium: 0.35
+  pause_long: 0.60
+
+alloy_warm_low:
+  description: "Warm, emotional tone (less deep than onyx)"
+  voice: alloy
+  model: tts-1-hd
+  format: wav
+  speed: 0.99
+  pause_profile: natural
+  pause_short: 0.25
+  pause_medium: 0.50
+  pause_long: 0.80
+
+echo_clear:
+  description: "Clear, energetic narration"
+  voice: echo
+  model: tts-1
+  format: wav
+  speed: 1.0
+  pause_profile: natural
+  pause_short: 0.25
+  pause_medium: 0.50
+  pause_long: 0.80
+
+fable_storytelling:
+  description: "Warm storytelling voice"
+  voice: fable
+  model: tts-1-hd
+  format: wav
+  speed: 0.97
+  pause_profile: broadcast
+  pause_short: 0.30
+  pause_medium: 0.65
+  pause_long: 1.10
