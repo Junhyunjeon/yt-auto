@@ -303,6 +303,52 @@ python3 scripts/compare_report_to_md.py --sort "openai_rms,-openai_duration" --l
 - Share results with team (CSV import to spreadsheet)
 - Document comparison results in pull requests (Markdown)
 
+### Plotting Metrics
+
+Turn CSV reports into visual charts for quick insights (no pandas):
+
+```bash
+# One-line plotting with defaults
+bash scripts/plot_reports.sh
+
+# Or use Python script directly for more control
+python3 scripts/plot_tts_metrics.py \
+  --csv-glob "output/reports/tts_compare_*.csv" \
+  --outdir output/reports/plots \
+  --rolling 3 \
+  --title-suffix "Onyx Natural vs Piper"
+
+# Limit to latest N runs and apply smoothing
+python3 scripts/plot_tts_metrics.py \
+  --csv-glob "output/reports/tts_compare_*.csv" \
+  --outdir output/reports/plots \
+  --rolling 5 \
+  --limit 20
+```
+
+**Generated Plots:**
+- `output/reports/plots/rms_trend.png` - RMS levels over time (line chart with rolling mean)
+- `output/reports/plots/duration_scatter.png` - OpenAI vs Piper duration comparison (scatter with y=x reference)
+- `output/reports/plots/openai_silence_hist.png` - OpenAI silence ratio distribution
+- `output/reports/plots/piper_silence_hist.png` - Piper silence ratio distribution (if available)
+
+**Options:**
+- `--rolling N`: Apply N-point rolling mean to smooth trend lines (default: 0, disabled)
+- `--limit N`: Show only latest N runs (sorted by timestamp)
+- `--title-suffix "text"`: Add custom suffix to chart titles
+- `--csv-glob "pattern"`: Custom glob pattern for CSV files
+
+**Use Cases:**
+- **Quality monitoring**: Spot RMS/peak anomalies at a glance
+- **A/B testing**: Visual comparison of different voice settings
+- **Trend analysis**: Track audio quality degradation or improvement over time
+- **Quick debugging**: Identify outliers in silence ratio or duration
+
+**Requirements:**
+- matplotlib (already installed in venv)
+- Runs in headless mode (no display required)
+- Works in CI/CD environments
+
 ## 🔧 System Requirements
 
 - macOS (tested on Mac Mini)
