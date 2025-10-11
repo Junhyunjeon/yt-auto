@@ -25,8 +25,8 @@ translate:
 
 # TTS settings
 tts:
-  engine: openai  # Default: OpenAI TTS (onyx_natural preset)
-  default_preset: onyx_natural  # Use onyx_natural by default
+  engine: piper  # Default: Piper TTS (offline)
+  default_preset: onyx_natural  # Use onyx_natural by default (for openai)
   sample_rate: 22050
   normalize: true
   crossfade_ms: 30
@@ -73,6 +73,16 @@ options:
 language:
   source: "ko"
   target: "en"
+
+# SEO settings
+seo:
+  title_prefix: ""
+  tags:
+    - Korean
+    - English
+    - Translation
+    - TTS
+    - Video
 
 # Video settings
 video:

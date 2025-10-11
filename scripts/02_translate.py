@@ -35,9 +35,19 @@ def run(slug: str):
     cfg = load_cfg()
     wd = pathlib.Path(cfg["paths"]["work_dir"]) / slug
     src = (wd/"clean_ko.txt").read_text(encoding="utf-8")
-    if cfg["use_api"]:
-        raise SystemExit("API 번역 분기는 비활성화 상태(use_api=false 권장).")
-    en = argos_translate(src, cfg["language"]["source"], cfg["language"]["target"])
+
+    # Check translation engine (default to argos for offline translation)
+    engine = cfg.get("translate", {}).get("default_engine", "argos")
+
+    if engine == "argos" or engine not in ["claude", "openai"]:
+        # Use Argos translate for offline translation
+        en = argos_translate(src, cfg["language"]["source"], cfg["language"]["target"])
+    else:
+        # API-based translation not implemented in this script
+        logger.warning(f"Translation engine '{engine}' requires API setup.")
+        logger.info("Falling back to Argos translate...")
+        en = argos_translate(src, cfg["language"]["source"], cfg["language"]["target"])
+
     (wd/"draft_en.txt").write_text(en, encoding="utf-8")
     logger.success(f"Translated -> {wd}/draft_en.txt")
 

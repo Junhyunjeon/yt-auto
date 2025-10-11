@@ -6,6 +6,23 @@
 
 set -euo pipefail
 
+# Get the script directory and project root
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+cd "$PROJECT_ROOT"
+
+# Activate virtual environment if it exists
+if [ -f .venv/bin/activate ]; then
+    source .venv/bin/activate
+fi
+
+# Use venv python if available
+if [ -f .venv/bin/python3 ]; then
+    PYTHON=.venv/bin/python3
+else
+    PYTHON=python3
+fi
+
 # Load environment variables
 if [ -f .env ]; then
     export $(grep -v '^#' .env | xargs 2>/dev/null || true)
@@ -21,7 +38,7 @@ echo "   Output: $OUTDIR"
 echo ""
 
 # Run comparison
-python3 scripts/compare_tts.py "$INPUT" \
+$PYTHON scripts/compare_tts.py "$INPUT" \
   --outdir "$OUTDIR" \
   --style-prefix "Speak calmly and confidently, as if narrating a professional video." \
   --pause-profile natural \
@@ -40,5 +57,5 @@ echo "Generated files:"
 ls -lh "$OUTDIR"/*.wav 2>/dev/null || echo "  (no WAV files generated)"
 echo ""
 echo "Comparison report:"
-cat work/cmp_*/compare_report.json | python3 -m json.tool 2>/dev/null || echo "  (report not found)"
+cat work/cmp_*/compare_report.json | $PYTHON -m json.tool 2>/dev/null || echo "  (report not found)"
 echo ""
